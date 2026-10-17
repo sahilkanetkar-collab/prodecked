@@ -13,6 +13,23 @@ const ICON={
   moon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>'
 };
 
+/* ---------------- usage counter ----------------
+   Records one anonymous line per tool action: which tool, what happened (run/done/fail/...),
+   how many files, phone or computer. Never file names, file contents, settings or anything personal. */
+const PD_STATS={url:"https://kgxjdzeciiajlgierjpn.supabase.co",key:"sb_publishable_butl8cOHsMdBPeTAauXM9Q_J9jh0J1E"};
+const isPhone=()=>matchMedia("(pointer: coarse)").matches&&Math.min(screen.width,innerWidth)<900;
+function track(tool,event,files,detail){
+  try{
+    if(!PD_STATS.url||PD_STATS.url.startsWith("__"))return;
+    const env=/(^|\.)prodecked\.com$/.test(location.hostname)?"prod":"test";
+    fetch(PD_STATS.url+"/rest/v1/prodecked_usage",{method:"POST",keepalive:true,
+      headers:{"apikey":PD_STATS.key,"Content-Type":"application/json","Prefer":"return=minimal"},
+      body:JSON.stringify({tool:String(tool).slice(0,40),event,files:files==null?null:Math.min(999,files|0),
+        device:isPhone()?"mobile":"desktop",detail:detail?String(detail).slice(0,40):null,env})}).catch(()=>{});
+  }catch(e){}
+}
+window.PD_track=track;
+
 /* ---------------- theme toggle ---------------- */
 function currentDark(){const t=document.documentElement.getAttribute("data-theme");if(t)return t==="dark";return matchMedia("(prefers-color-scheme: dark)").matches}
 function paintThemeBtn(){const b=$("#themeBtn");if(!b)return;b.innerHTML=currentDark()?ICON.sun:ICON.moon;b.setAttribute("aria-label",currentDark()?"Switch to light mode":"Switch to dark mode")}
@@ -110,6 +127,7 @@ function initTool(){
     drop.innerHTML=ICON.up+`<div class="big">${T.multi?"Drop your PowerPoint files here":"Drop your PowerPoint file here"}</div><div class="hint">or click to choose ${T.multi?"one or more .pptx files":"a .pptx file"}</div>`;
     const list=el("ul",{class:"files",id:"fileList"});
     inputPanel.append(inp,drop,list);
+    if(isPhone())inputPanel.prepend(phoneNote(id));
     const setFiles=fl=>{
       const arr=[...fl];const bad=arr.filter(f=>!/\.pptx$/i.test(f.name));
       files=(T.multi?files.concat(arr):arr).filter(f=>/\.pptx$/i.test(f.name));if(!T.multi)files=files.slice(0,1);
@@ -232,6 +250,8 @@ function initTool(){
     status.innerHTML="";const pw=el("div",{class:"progress"},[progEl=el("i")]);progLbl=el("div",{class:"hint",text:"Starting…"});status.append(pw,progLbl);
     const logLines=[];const log=(k,v,cls)=>logLines.push({k,v,cls});
     const t0=performance.now();
+    const nFiles=T.input==="pptx"?files.length:null;
+    track(id,"run",nFiles);
     try{
       let out;
       if(T.input==="text"){out=await T.run(vals,ui)}
@@ -241,12 +261,14 @@ function initTool(){
       if(out.stats){const st=el("div",{class:"stats"});out.stats.forEach(([n,l])=>st.appendChild(el("div",{class:"stat"},[el("b",{text:String(n)}),el("span",{text:l})])));box.appendChild(st)}
       if(out.warn)box.appendChild(el("p",{class:"w",style:"color:var(--pen)",text:out.warn}));
       box.appendChild(el("p",{text:`Your download (${out.name}, ${fmtB(out.blob.size)}) should start by itself. Made in ${Math.max(0.1,(performance.now()-t0)/1000).toFixed(1)} s on your own device.`}));
-      box.appendChild(el("div",{class:"acts"},[el("button",{type:"button",class:"btn btn-primary btn-sm",text:"Download again",onclick:()=>download(out.blob,out.name)}),
+      box.appendChild(el("div",{class:"acts"},[el("button",{type:"button",class:"btn btn-primary btn-sm",text:"Download again",onclick:()=>{track(id,"again",nFiles);download(out.blob,out.name)}}),
         T.input==="pptx"?el("button",{type:"button",class:"btn btn-ghost btn-sm",text:"Start over",onclick:()=>location.reload()}):null]));
       if(out.preview)box.appendChild(el("pre",{class:"log",style:"white-space:pre-wrap",text:out.preview+(out.preview.length>=1800?"\n…":"")}));
       if(logLines.length){const lg=el("div",{class:"log",role:"log"});logLines.forEach(l=>{lg.appendChild(el("div",{class:l.cls||""},[el("span",{text:l.k}),el("b",{text:l.v})]))});box.appendChild(el("details",{open:logLines.length<=12?true:null},[el("summary",{style:"cursor:pointer;margin-top:12px;font-weight:700;font-size:15px",text:"What changed"}),lg]))}
       download(out.blob,out.name);
-    }catch(e){console.error(e);pw.remove();progLbl.remove();showMsg("err","That didn't work",escH(e.message||String(e)))}
+      track(id,"done",nFiles);
+      const nx=nextPanel(id);if(nx)box.appendChild(nx);
+    }catch(e){console.error(e);pw.remove();progLbl.remove();showMsg("err","That didn't work",escH(e.message||String(e)));track(id,"fail",nFiles)}
     go.disabled=false;go.textContent=label;
   });
 
@@ -286,6 +308,53 @@ function initTool(){
     return{blob:await z.generateAsync({type:"blob"}),name:"prodecked_"+(T.suffix||"files")+".zip",summary:`${results.length} files done`,
       stats:[[results.length,"files"],[fmtB(tb),"before"],[fmtB(ta),"after"]],warn:results.map(x=>x.r.warn).filter(Boolean)[0]||null};
   }
+}
+
+/* ---------------- after a download: what next + share ---------------- */
+function pageUrl(){const c=document.querySelector('link[rel="canonical"]');return c?c.href:location.origin+location.pathname}
+function toolName(){return document.title.split(" · ")[0]}
+function shareRow(id,where){
+  const url=pageUrl();
+  const msg=`Free PowerPoint tool, works in the browser, no sign-up: ${toolName()}\n${url}`;
+  const wa=el("a",{class:"btn btn-ghost btn-sm",href:"https://wa.me/?text="+encodeURIComponent(msg),target:"_blank",rel:"noopener",text:"Share on WhatsApp",onclick:()=>track(id,"share",null,where+"-whatsapp")});
+  const cp=el("button",{type:"button",class:"btn btn-ghost btn-sm",text:"Copy link"});
+  cp.addEventListener("click",async()=>{track(id,"share",null,where+"-copy");try{await navigator.clipboard.writeText(url);cp.textContent="Link copied ✓"}catch(e){prompt("Copy this link:",url)}setTimeout(()=>cp.textContent="Copy link",2500)});
+  return el("div",{class:"acts"},[wa,cp]);
+}
+function nextPanel(id){
+  const links=[...document.querySelectorAll(".related .grid a.tool")].slice(0,3);
+  const wrap=el("div",{class:"nextup"});
+  if(links.length){
+    wrap.appendChild(el("h4",{text:"Goes well with this"}));
+    const row=el("div",{class:"nextlinks"});
+    links.forEach(a=>{const href=a.getAttribute("href");const target=href.replace(/\.html$/,"");
+      const b=a.querySelector("b"),d=a.querySelector(".d");
+      row.appendChild(el("a",{href,onclick:()=>track(id,"next",null,target)},[el("b",{text:b?b.textContent:target}),d?el("span",{text:d.textContent}):null]))});
+    wrap.appendChild(row);
+  }
+  wrap.appendChild(el("h4",{text:"Know a colleague who'd find this useful?"}));
+  wrap.appendChild(shareRow(id,"done"));
+  return wrap;
+}
+
+/* ---------------- phones: point people to a laptop ---------------- */
+function phoneNote(id){
+  const KEY="pd.phoneNoteHidden";
+  try{if(localStorage.getItem(KEY))return document.createTextNode("")}catch(e){}
+  const url=pageUrl();
+  const box=el("div",{class:"phonenote",role:"note"});
+  const close=el("button",{type:"button",class:"x","aria-label":"Hide this note",text:"×",onclick:()=>{box.remove();try{localStorage.setItem(KEY,"1")}catch(e){}}});
+  box.append(close,el("p",{html:"<b>On your phone?</b> This works best on a laptop or computer, where your PowerPoint files usually are. Send yourself the link and open it there."}));
+  const acts=el("div",{class:"acts"});
+  if(navigator.share){
+    acts.appendChild(el("button",{type:"button",class:"btn btn-primary btn-sm",text:"Send me this link",onclick:()=>{track(id,"share",null,"phone-native");navigator.share({title:toolName()+" · ProDecked",url}).catch(()=>{})}}));
+  }else{
+    acts.appendChild(el("a",{class:"btn btn-primary btn-sm",href:"https://wa.me/?text="+encodeURIComponent(url),target:"_blank",rel:"noopener",text:"Send to myself on WhatsApp",onclick:()=>track(id,"share",null,"phone-whatsapp")}));
+  }
+  acts.appendChild(el("a",{class:"btn btn-ghost btn-sm",href:"mailto:?subject="+encodeURIComponent("ProDecked: "+toolName())+"&body="+encodeURIComponent(url),text:"Email it to me",onclick:()=>track(id,"share",null,"phone-email")}));
+  box.appendChild(acts);
+  box.appendChild(el("p",{class:"small",text:"Have the file on this phone? You can still use the tool below."}));
+  return box;
 }
 
 const SAMPLE_Q=`1. Which word is closest in meaning to SANGUINE?

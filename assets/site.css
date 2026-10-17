@@ -313,3 +313,22 @@ section[id]{scroll-margin-top:84px}
 @media (max-width:560px){.band .band-grid{grid-template-columns:1fr}}
 .band.wide{grid-template-columns:1.05fr .95fr;align-items:start}
 @media (max-width:860px){.band.wide{grid-template-columns:1fr}}
+
+/* after a download: what next + share */
+.nextup{margin-top:18px;padding-top:16px;border-top:1px solid var(--rule)}
+.nextup h4{font-family:var(--f-display);font-size:15px;margin:0 0 10px;color:var(--ink)}
+.nextup h4+.acts{margin-top:0}
+.nextup .nextlinks+h4{margin-top:18px}
+.nextlinks{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.nextlinks a{display:block;padding:11px 13px;border:1px solid var(--rule);border-radius:10px;background:var(--sheet);color:var(--ink);text-decoration:none;transition:border-color .15s}
+.nextlinks a:hover{border-color:var(--blue)}
+.nextlinks b{display:block;font-size:14.5px;color:var(--blue)}
+.nextlinks span{display:block;font-size:13px;color:var(--ink-2);margin-top:3px;line-height:1.35}
+
+/* phones: point people to a laptop */
+.phonenote{position:relative;margin-bottom:14px;padding:14px 40px 14px 14px;border-radius:12px;background:var(--blue-soft);border:1px solid color-mix(in srgb,var(--blue) 35%,transparent)}
+.phonenote p{font-size:14.5px;color:var(--ink);margin:0;line-height:1.45}
+.phonenote p.small{font-size:13px;color:var(--ink-2);margin-top:10px}
+.phonenote .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.phonenote .x{position:absolute;top:6px;right:8px;width:30px;height:30px;border:0;background:transparent;color:var(--ink-2);font-size:22px;line-height:1;cursor:pointer;border-radius:8px}
+.phonenote .x:hover{background:color-mix(in srgb,var(--ink) 8%,transparent)}

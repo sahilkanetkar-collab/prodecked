@@ -35,3 +35,11 @@ Ask Claude to switch the domain. Every page, the sitemap and the privacy email u
 | Extract | Extract Images · PPT to Text |
 
 The homepage lists these as coming soon: Merge PPTs, PDF to PPT, Flashcard Deck, Certificate Maker, Deck to Online Test, PPT to PDF or Video, Translate a Deck and Answer-Key Checker.
+
+## Usage counter (added 17 Oct 2026)
+
+`assets/app.js` sends one anonymous line per tool action to the Supabase table `prodecked_usage`
+(project "Camp-Verbal"): tool, event (`run`, `done`, `fail`, `again`, `next`, `share`), number of files,
+phone or computer, and `env` (`prod` on prodecked.com, `test` anywhere else). No file names, contents or personal data.
+The page can only add rows, never read them. Look at the numbers in the Supabase dashboard (Table Editor → prodecked_usage)
+or ask Claude for a ProDecked usage report.
