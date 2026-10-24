@@ -203,6 +203,7 @@ h1,.drop .big,.subhead{font-family:"Space Grotesk","Helvetica Neue",Arial,sans-s
 <link rel="stylesheet" href="assets/fonts.css">
 <script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};</script>
 <script defer src="/_vercel/insights/script.js"></script>
+<script src="assets/stats.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -2419,6 +2420,8 @@ $("go").addEventListener("click",async()=>{
   const go=$("go");go.disabled=true;go.textContent="Working…";
   const log=$("log");log.className="log show";log.innerHTML="";
   const put=(html,cls)=>{const d=document.createElement("div");d.className=cls||"slide-line";d.innerHTML=html;log.appendChild(d)};
+  const track=(ev,detail)=>{try{window.PD_track&&window.PD_track("studio",ev,theFiles.length,detail)}catch(e){}};
+  track("run");
   try{
     if(state.bgmode==="image"&&!bgImg)throw new Error("Background is set to Image but no image was chosen.");
     if(state.bgmode==="preset"&&!state.bgPreset)throw new Error("Background is set to Preset but none is selected.");
@@ -2438,6 +2441,7 @@ $("go").addEventListener("click",async()=>{
       const outName=f.name.replace(/\.pptx$/i,"")+"_prodecked.pptx";
       download(blob,outName);
       put(`Done: ${summary(st)} Downloaded as ${outName.replace(/</g,"&lt;")}.`,"done");
+      track("done");
     }else{
       const bundle=new JSZip();let ok=0;const cfg=buildCfg({noKey:true,perSlide:false});
       for(const f of theFiles){
@@ -2448,9 +2452,10 @@ $("go").addEventListener("click",async()=>{
       }
       if(!ok)throw new Error("No decks could be processed.");
       download(await bundle.generateAsync({type:"blob",compression:"DEFLATE"}),"prodecked_batch.zip");
-      put(`Done: ${ok} of ${theFiles.length} decks processed. Downloaded as deck_studio_batch.zip.`,"done");
+      put(`Done: ${ok} of ${theFiles.length} decks processed. Downloaded as prodecked_batch.zip.`,"done");
+      track("done","batch");
     }
-  }catch(err){console.error(err);put("Something went wrong: "+err.message,"done fail")}
+  }catch(err){console.error(err);put("Something went wrong: "+err.message,"done fail");track("fail",err&&err.message||"unknown error")}
   go.disabled=false;go.textContent=theFiles.length>1?("Process "+theFiles.length+" decks"):"Process deck";
 });
 

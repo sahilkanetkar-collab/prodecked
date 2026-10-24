@@ -14,21 +14,9 @@ const ICON={
 };
 
 /* ---------------- usage counter ----------------
-   Records one anonymous line per tool action: which tool, what happened (run/done/fail/...),
-   how many files, phone or computer. Never file names, file contents, settings or anything personal. */
-const PD_STATS={url:"https://kgxjdzeciiajlgierjpn.supabase.co",key:"sb_publishable_butl8cOHsMdBPeTAauXM9Q_J9jh0J1E"};
+   Lives in assets/stats.js (shared with the Studio). Falls back to a no-op if that script is missing. */
+const track=(...a)=>{try{window.PD_track&&window.PD_track(...a)}catch(e){}};
 const isPhone=()=>matchMedia("(pointer: coarse)").matches&&Math.min(screen.width,innerWidth)<900;
-function track(tool,event,files,detail){
-  try{
-    if(!PD_STATS.url||PD_STATS.url.startsWith("__"))return;
-    const env=/(^|\.)prodecked\.com$/.test(location.hostname)?"prod":"test";
-    fetch(PD_STATS.url+"/rest/v1/prodecked_usage",{method:"POST",keepalive:true,
-      headers:{"apikey":PD_STATS.key,"Content-Type":"application/json","Prefer":"return=minimal"},
-      body:JSON.stringify({tool:String(tool).slice(0,40),event,files:files==null?null:Math.min(999,files|0),
-        device:isPhone()?"mobile":"desktop",detail:detail?String(detail).slice(0,40):null,env})}).catch(()=>{});
-  }catch(e){}
-}
-window.PD_track=track;
 
 /* ---------------- theme toggle ---------------- */
 function currentDark(){const t=document.documentElement.getAttribute("data-theme");if(t)return t==="dark";return matchMedia("(prefers-color-scheme: dark)").matches}
@@ -268,7 +256,7 @@ function initTool(){
       download(out.blob,out.name);
       track(id,"done",nFiles);
       const nx=nextPanel(id);if(nx)box.appendChild(nx);
-    }catch(e){console.error(e);pw.remove();progLbl.remove();showMsg("err","That didn't work",escH(e.message||String(e)));track(id,"fail",nFiles)}
+    }catch(e){console.error(e);pw.remove();progLbl.remove();showMsg("err","That didn't work",escH(e.message||String(e)));track(id,"fail",nFiles,(e&&(e.message||String(e)))||"unknown error")}
     go.disabled=false;go.textContent=label;
   });
 
