@@ -265,12 +265,18 @@ function initTool(){
     for(let i=0;i<list.length;i++){
       const f=list[i];progress(i/list.length,multi?`File ${i+1} of ${list.length}: ${f.name}`:"Reading "+f.name);
       let zip;
-      try{zip=await JSZip.loadAsync(await f.arrayBuffer())}catch(e){throw new Error(`${f.name} couldn't be opened. It may be damaged, password-protected, or not really a .pptx.`)}
-      if(!zip.file("ppt/presentation.xml"))throw new Error(`${f.name} isn't a PowerPoint file inside (no presentation found).`);
+      const opened=await PDOpen.open(f,{salvage:id==="repair-ppt"});zip=opened.zip;
       if(multi)log("▶ "+f.name,fmtB(f.size));
+      if(opened.salvaged){
+        log("Recovered",`${opened.salvaged.recovered} parts from a damaged file`);
+        opened.salvaged.lost.forEach(n=>log("Lost (too damaged)",n,"warn"));
+      }
       const sub=(fr,lbl)=>progress((i+fr)/list.length,(multi?`File ${i+1} of ${list.length} · `:"")+lbl);
       let r;
-      if(T.custom){r=await T.custom(zip,v,log,sub,f.name)}
+      if(T.custom){r=await T.custom(zip,v,log,sub,f.name);
+        if(opened.salvaged){const L=opened.salvaged.lost.length;
+          r={...r,summary:"Damaged file recovered"+(/^no problems/i.test(r.summary)?"":" and "+r.summary.toLowerCase()),
+            warn:[L?`${L} part${L>1?"s were":" was"} too damaged to save, so check the last few slides.`:null,r.warn].filter(Boolean).join(" ")||null}}}
       else{
         const cfg={...T.cfg(v),parse:s=>new DOMParser().parseFromString(s,"text/xml")};
         const n=(await orderedSlides(zip)).length;let k=0;

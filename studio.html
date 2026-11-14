@@ -206,6 +206,7 @@ h1,.drop .big,.subhead{font-family:"Space Grotesk","Helvetica Neue",Arial,sans-s
 <script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};</script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script src="assets/stats.js"></script>
+<script src="assets/opendeck.js?v=1"></script>
 </head>
 <body>
 <div class="wrap">
@@ -2038,7 +2039,7 @@ async function loadDeck(file){
   slideOv={};deck=null;
   $("deckInfo").style.display="";$("deckInfo").textContent="Reading the deck…";
   try{
-    const zip=await JSZip.loadAsync(await file.arrayBuffer());
+    const zip=await (await PDOpen.open(file)).zip;
     const names=await orderedSlides(zip);const{W,H}=await slideSize(zip);
     const R=partResolver(zip);
     const presXml=await R.readPart("ppt/presentation.xml");
@@ -2074,7 +2075,7 @@ async function loadDeck(file){
     await renderPreview();
   }catch(e){
     console.error(e);deck=null;$("psBox").style.display="none";$("pvBox").classList.remove("show");
-    $("deckInfo").textContent="Couldn't read this deck for the preview ("+e.message+"). You can still process it.";
+    $("deckInfo").textContent=e&&e.name==="PDOpenError"?e.message:"Couldn't read this deck for the preview ("+e.message+"). You can still process it.";
   }
 }
 function updatePsEffectLists(){
@@ -2456,7 +2457,7 @@ $("go").addEventListener("click",async()=>{
       return parts.join(", ")+"."+(bad?` <span style="color:var(--err)">${bad} answer-key mismatch${bad>1?"es":""}; see ⚠ lines above.</span>`:"");
     };
     if(theFiles.length===1){
-      const f=theFiles[0];const zip=await JSZip.loadAsync(await f.arrayBuffer());
+      const f=theFiles[0];const zip=await (await PDOpen.open(f)).zip;
       const st=await processPackage(zip,buildCfg(),put);
       const blob=await zip.generateAsync({type:"blob",compression:"DEFLATE",mimeType:"application/vnd.openxmlformats-officedocument.presentationml.presentation"});
       const outName=f.name.replace(/\.pptx$/i,"")+"_prodecked.pptx";
@@ -2467,7 +2468,7 @@ $("go").addEventListener("click",async()=>{
       const bundle=new JSZip();let ok=0;const cfg=buildCfg({noKey:true,perSlide:false});
       for(const f of theFiles){
         put(`<span style="opacity:.7">▶ ${f.name.replace(/</g,"&lt;")}</span><b>processing…</b>`);
-        try{const zip=await JSZip.loadAsync(await f.arrayBuffer());const st=await processPackage(zip,cfg,put);
+        try{const zip=await (await PDOpen.open(f)).zip;const st=await processPackage(zip,cfg,put);
           bundle.file(f.name.replace(/\.pptx$/i,"")+"_prodecked.pptx",await zip.generateAsync({type:"uint8array",compression:"DEFLATE"}));ok++;put(summary(st),"slide-line")}
         catch(e){put("Skipped "+f.name.replace(/</g,"&lt;")+": "+e.message,"done fail")}
       }

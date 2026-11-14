@@ -129,8 +129,25 @@ async function compressDeck(zip,{level="balanced",pngToJpg=true,removeUnused=tru
 async function repairDeck(zip,{parse,processPackage}={}){
   const fixes=[];const warns=[];
   const names=new Set(Object.keys(zip.files).filter(n=>!zip.files[n].dir));
-  if(!names.has("[Content_Types].xml"))throw new Error("This file has no [Content_Types].xml, so it is not a PowerPoint package (or it is too damaged to rebuild in the browser).");
   if(!names.has("ppt/presentation.xml"))throw new Error("ppt/presentation.xml is missing. This may be a Word or Excel file renamed to .pptx.");
+  // 0. rebuild the package's two index files if they were lost (common in cut-off or half-copied files)
+  if(!names.has("[Content_Types].xml")){
+    const PML="application/vnd.openxmlformats-officedocument.";
+    const known={"ppt/presentation.xml":PML+"presentationml.presentation.main+xml","ppt/presProps.xml":PML+"presentationml.presProps+xml",
+      "ppt/viewProps.xml":PML+"presentationml.viewProps+xml","ppt/tableStyles.xml":PML+"presentationml.tableStyles+xml",
+      "docProps/core.xml":"application/vnd.openxmlformats-package.core-properties+xml","docProps/app.xml":PML+"extended-properties+xml"};
+    let ct=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="${MIME.rels}"/><Default Extension="xml" ContentType="application/xml"/>`;
+    for(const[n,ty]of Object.entries(known))if(names.has(n))ct+=`<Override PartName="/${n}" ContentType="${ty}"/>`;
+    ct+="</Types>";zip.file("[Content_Types].xml",ct);names.add("[Content_Types].xml");
+    fixes.push("rebuilt the missing file-type index ([Content_Types].xml)");
+  }
+  if(!names.has("_rels/.rels")){
+    let rels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="${REL_NS}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>`;
+    if(names.has("docProps/core.xml"))rels+=`<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>`;
+    if(names.has("docProps/app.xml"))rels+=`<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>`;
+    rels+="</Relationships>";zip.file("_rels/.rels",rels);names.add("_rels/.rels");
+    fixes.push("rebuilt the missing package index (_rels/.rels)");
+  }
   // 1. relationships pointing at missing parts
   for(const r of await allRels(zip)){
     if(r.src&&!names.has(r.src)){zip.remove(r.rn);fixes.push(`removed orphan relationship file ${r.rn}`);continue}
@@ -152,6 +169,39 @@ async function repairDeck(zip,{parse,processPackage}={}){
     }
     if(changed)zip.file(r.rn,xml);
   }
+  // 1b. slides whose relationship file was lost: give them back a layout, and drop the links that pointed nowhere
+  {
+    const layouts=[...names].filter(n=>/^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(n)).sort((a,b)=>(+a.match(/(\d+)\.xml$/)[1])-(+b.match(/(\d+)\.xml$/)[1]));
+    const T_LAYOUT="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout";
+    for(const sn of [...names].filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n))){
+      const rn=relsFor(sn);let rx=zip.file(rn)?await zip.file(rn).async("string"):null;
+      if(rx&&rx.includes(T_LAYOUT))continue;
+      if(!layouts.length){warns.push(`${sn} has lost its layout and there is no layout left to attach it to`);continue}
+      const lay="../slideLayouts/"+layouts[0].split("/").pop();
+      if(rx){rx=rx.replace("</Relationships>",`<Relationship Id="rIdPdLayout" Type="${T_LAYOUT}" Target="${lay}"/></Relationships>`);zip.file(rn,rx);fixes.push(`re-attached a layout to ${sn}`);continue}
+      zip.file(rn,`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="${REL_NS}"><Relationship Id="rId1" Type="${T_LAYOUT}" Target="${lay}"/></Relationships>`);names.add(rn);
+      // its pictures, charts and links pointed through the lost file, so they can't be recovered: remove the dangling references
+      let sx=await zip.file(sn).async("string");const s0=sx;
+      if(parse&&typeof XMLSerializer!=="undefined"){
+        const d=parse(sx);
+        if(!d.getElementsByTagName("parsererror").length){
+          const R="http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+          const all=[...d.getElementsByTagName("*")];
+          for(const el of all){
+            if(!el.parentNode)continue;
+            const ln=el.localName;
+            if(ln==="graphicFrame"&&el.getElementsByTagName("*")&&[...el.getElementsByTagName("*")].some(x=>[...x.attributes].some(a=>a.namespaceURI===R))){el.parentNode.removeChild(el);continue}
+            if(ln==="pic"&&[...el.getElementsByTagName("*")].some(x=>x.localName==="blip"&&[...x.attributes].some(a=>a.namespaceURI===R))){el.parentNode.removeChild(el);continue}
+            if(/^hlink/.test(ln)){el.parentNode.removeChild(el);continue}
+            for(const a of [...el.attributes])if(a.namespaceURI===R)el.removeAttributeNode(a);
+          }
+          sx=new XMLSerializer().serializeToString(d);
+        }
+      }
+      if(sx!==s0)zip.file(sn,sx);
+      fixes.push(`rebuilt the lost links file for ${sn} (its layout is restored; pictures, charts or links on that slide could not be recovered)`);
+    }
+  }
   // 2. content types: every extension has a Default, every xml part an Override when needed
   let ct=await zip.file("[Content_Types].xml").async("string");const ct0=ct;
   const exts=new Set([...names].map(extOf).filter(Boolean));
@@ -166,7 +216,12 @@ async function repairDeck(zip,{parse,processPackage}={}){
     [/^ppt\/slideLayouts\/slideLayout\d+\.xml$/,"application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"],
     [/^ppt\/slideMasters\/slideMaster\d+\.xml$/,"application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"],
     [/^ppt\/notesSlides\/notesSlide\d+\.xml$/,"application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"],
-    [/^ppt\/theme\/theme\d+\.xml$/,"application/vnd.openxmlformats-officedocument.theme+xml"]];
+    [/^ppt\/theme\/theme\d+\.xml$/,"application/vnd.openxmlformats-officedocument.theme+xml"],
+    [/^ppt\/notesMasters\/notesMaster\d+\.xml$/,"application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"],
+    [/^ppt\/handoutMasters\/handoutMaster\d+\.xml$/,"application/vnd.openxmlformats-officedocument.presentationml.handoutMaster+xml"],
+    [/^ppt\/commentAuthors\.xml$/,"application/vnd.openxmlformats-officedocument.presentationml.commentAuthors+xml"],
+    [/^ppt\/comments\/comment\d+\.xml$/,"application/vnd.openxmlformats-officedocument.presentationml.comments+xml"],
+    [/^ppt\/charts\/chart\d+\.xml$/,"application/vnd.openxmlformats-officedocument.drawingml.chart+xml"]];
   for(const n of names)for(const[re,t]of OVR)if(re.test(n)&&!new RegExp(`PartName="/${n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}"`).test(ct)){
     ct=ct.replace("</Types>",`<Override PartName="/${n}" ContentType="${t}"/></Types>`);fixes.push(`registered ${n}`)}
   // overrides for parts that no longer exist

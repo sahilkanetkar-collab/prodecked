@@ -43,3 +43,11 @@ The homepage lists these as coming soon: Merge PPTs, PDF to PPT, Flashcard Deck,
 phone or computer, and `env` (`prod` on prodecked.com, `test` anywhere else). No file names, contents or personal data.
 The page can only add rows, never read them. Look at the numbers in the Supabase dashboard (Table Editor → prodecked_usage)
 or ask Claude for a ProDecked usage report.
+
+## Opening files (added 14 Nov 2026)
+
+`assets/opendeck.js` opens every uploaded deck (tool pages and the Studio) and explains in plain words when it can't:
+password-protected, old `.ppt`, a PDF/Word/Excel/Keynote file renamed to `.pptx`, or a file that couldn't be read from the device
+(cloud shortcut, file still open). Damaged files (cut off or broken copies) are rebuilt entry by entry on the Repair PPT page; the
+other tools send people to Repair PPT first. Repair also rebuilds a missing `[Content_Types].xml` / `_rels/.rels` and gives slides
+that lost their links file their layout back.
