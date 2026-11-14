@@ -7,9 +7,15 @@ function xmlUnesc(s){return String(s).replace(/&lt;/g,"<").replace(/&gt;/g,">").
 
 /* ---------- slide range: "all" | "1,3,5-9" ---------- */
 function parseRange(str,n){
-  const s=(str||"all").trim().toLowerCase();
+  let s=String(str==null?"":str).trim().toLowerCase();
   const set=new Set();
-  if(!s||s==="all"){for(let i=1;i<=n;i++)set.add(i);return set}
+  /* no numbers at all ("all", "all slides", "toutes", blank…) means every slide */
+  if(!/\d/.test(s)){for(let i=1;i<=n;i++)set.add(i);return set}
+  s=s.replace(/[\u2010-\u2015~]/g,"-")                                   /* en/em dashes, tilde */
+     .replace(/(\d)\s*(?:\.\.+|\.|:|to|till|until|through|thru|bis|hasta|al|à|a)\s*(?=\d)/g,"$1-") /* 1.11, 1..11, 1 to 11, 1 à 11 */
+     .replace(/\b(?:slides?|slide no\.?|diapositivas?|diapositives?|diapos?|folien?)\b/g," ")
+     .replace(/\s+(?:and|et|y|und|e)\s+|[;&+\/|]/g,",")                 /* 2 and 5, 2;5, 2&5 */
+     .replace(/(\d)\s+(?=\d)/g,"$1,");                                    /* "2 5 9" */
   for(const part of s.split(",")){
     const m=part.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
     if(!m)continue;
@@ -1079,7 +1085,7 @@ async function processPackage(zip,cfg,put){
   const names=await orderedSlides(zip);
   if(!names.length)throw new Error("No slides found — is this a valid .pptx?");
   const range=parseRange(cfg.range,names.length);
-  if(!range.size)throw new Error('Slide range "'+cfg.range+'" matches no slides.');
+  if(!range.size)throw new Error('"Which slides" says "'+String(cfg.range).trim()+'", which doesn\'t match any of the '+names.length+' slides in this deck. Leave it as "all", or list slides like 2-10, 14.');
   const{W,H}=await slideSize(zip);
   const stats={touched:0,totalAnim:0,stripped:0,questions:[],fixedIds:0};
 
