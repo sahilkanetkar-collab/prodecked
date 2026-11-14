@@ -29,8 +29,17 @@ T["animate-ppt"]={input:"pptx",multi:true,suffix:"animated",
     {k:"skipTitle",type:"toggle",label:"Leave slide titles still",def:true},
     {k:"replace",type:"toggle",label:"Replace animations the deck already has",hint:"Off: slides that are already animated are left alone.",def:false},
     {k:"dur",type:"range",label:"Speed",min:200,max:1500,step:50,def:500,fmt:v=>(v/1000).toFixed(2)+" s"},
+    {k:"tr",type:"chips",label:"Slide transition too",hint:"Add a transition between slides in the same go, so you don't need a second tool.",
+      options:[["keep","No change"],["fade","Fade"],["push","Push"],["wipe","Wipe"],["morph","Morph"],["none","Remove"]],def:"keep"},
     range],
-  cfg:v=>({...BASE,range:v.range,existing:v.replace?"replace":"keep",
+  demo:"animate",
+  presets:[
+    {id:"classroom",name:"Classroom",desc:"One bullet per click, the last one greyed, fade between slides",v:{effect:"fade",gran:"para",trigger:"click",dim:true,skipTitle:true,dur:500,tr:"fade"}},
+    {id:"self-running",name:"Self-running",desc:"Bullets come in by themselves, no clicks",v:{effect:"fade",gran:"para",trigger:"after",dim:false,skipTitle:true,dur:400,tr:"fade"}},
+    {id:"subtle",name:"Subtle",desc:"The whole text box fades in on one click",v:{effect:"fade",gran:"shape",trigger:"click",dim:false,skipTitle:true,dur:400,tr:"keep"}},
+    {id:"lively",name:"Lively",desc:"Bullets fly in one by one, slides push in",v:{effect:"flyin",gran:"para",trigger:"click",dim:false,skipTitle:true,dur:600,tr:"push"}}],
+  note:"Morph needs PowerPoint 2019 or Microsoft 365. Older PowerPoint and Google Slides show a fade instead.",
+  cfg:v=>({...BASE,range:v.range,existing:v.replace?"replace":"keep",transition:v.tr||"keep",spd:"fast",
     anim:{effect:v.effect,dir:"b",granularity:v.gran,trigger:v.trigger,duration:+v.dur,stagger:v.trigger==="after"?200:0,skipTitle:v.skipTitle,dimAfter:v.dim,scope:{text:true,pic:true,other:true}}})
 };
 T["quiz-answer-reveal"]={input:"pptx",multi:false,suffix:"reveal",
@@ -89,8 +98,13 @@ T["ppt-transitions"]={input:"pptx",multi:true,suffix:"transitions",
   fields:[
     {k:"t",type:"chips",label:"Transition",options:[["fade","Fade"],["fadeblack","Fade through black"],["push","Push"],["wipe","Wipe"],["cover","Cover"],["dissolve","Dissolve"],["morph","Morph"],["none","Remove all"]],def:"fade"},
     {k:"spd",type:"chips",label:"Speed",options:[["fast","Fast"],["med","Medium"],["slow","Slow"]],def:"fast",showIf:v=>v.t!=="none"&&v.t!=="morph"},
+    {k:"anim",type:"chips",label:"Animate the text too",hint:"Add click-by-click text animation in the same go. Slides that already have animations are left as they are.",
+      options:[["no","No"],["para","One bullet per click"],["shape","Whole box per click"]],def:"no"},
+    {k:"effect",type:"select",label:"Text effect",options:ENTR,def:"fade",showIf:v=>v.anim&&v.anim!=="no"},
     range],
-  cfg:v=>({...BASE,range:v.range,transition:v.t,spd:v.spd}),
+  demo:"transitions",
+  cfg:v=>({...BASE,range:v.range,transition:v.t,spd:v.spd,
+    anim:v.anim&&v.anim!=="no"?{effect:v.effect||"fade",dir:"b",granularity:v.anim,trigger:"click",duration:500,stagger:0,skipTitle:true,dimAfter:false,scope:{text:true,pic:true,other:true}}:null}),
   note:"Morph needs PowerPoint 2019 or Microsoft 365. Older PowerPoint and Google Slides show a fade instead."
 };
 T["ppt-background-theme"]={input:"pptx",multi:true,suffix:"restyled",

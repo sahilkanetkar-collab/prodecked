@@ -212,11 +212,31 @@ function initTool(){
   }
   const optFields=T.fields.filter(f=>f.type!=="questions"),qField=T.fields.find(f=>f.type==="questions");
   if(qField)inputPanel.appendChild(renderField(qField));
-  if(optFields.length){const box=el("div",{class:"fields"});optFields.forEach(f=>{const w=renderField(f);fieldEls.push([f,w]);box.appendChild(w)});optPanel.appendChild(box)}
-  else optPanel.appendChild(el("p",{class:"note",text:"No settings needed. Add your file and press the button."}));
-  if(T.note)optPanel.appendChild(el("p",{class:"note",style:"margin-top:16px",text:T.note}));
+  /* live preview + ready-made styles (only on tools that define them) */
+  const demoHost=el("div");let demo=null;
+  if(T.demo&&window.PDDemo){try{demo=PDDemo.mount(demoHost,T.demo)}catch(e){demo=null}}
+  let presetBtns=[];
+  const presetMatch=p=>Object.entries(p.v).every(([k,v])=>vals[k]===v);
+  function presetRow(){
+    const row=el("div",{class:"chips",role:"group","aria-label":"Ready-made styles"});
+    presetBtns=T.presets.map(p=>{const b=el("button",{type:"button","aria-pressed":"false",onclick:()=>{
+        saved={...vals,...p.v};renderOpts();changed();track(id,"preset",null,p.id)}},[el("b",{text:p.name}),el("small",{text:p.desc})]);
+      b._p=p;row.appendChild(b);return b});
+    return el("div",{class:"field presets"},[el("div",{class:"fl",text:"Ready-made styles"}),row]);
+  }
+  function renderOpts(){
+    optPanel.innerHTML="";fieldEls.length=0;
+    if(demo)optPanel.appendChild(demoHost);
+    if(T.presets)optPanel.appendChild(presetRow());
+    if(optFields.length){const box=el("div",{class:"fields"});optFields.forEach(f=>{const w=renderField(f);fieldEls.push([f,w]);box.appendChild(w)});optPanel.appendChild(box)}
+    else optPanel.appendChild(el("p",{class:"note",text:"No settings needed. Add your file and press the button."}));
+    if(T.note)optPanel.appendChild(el("p",{class:"note",style:"margin-top:16px",text:T.note}));
+  }
+  renderOpts();
   function changed(quiet){
     fieldEls.forEach(([f,w])=>{if(f.showIf)w.hidden=!f.showIf(vals)});
+    presetBtns.forEach(b=>b.setAttribute("aria-pressed",presetMatch(b._p)?"true":"false"));
+    if(demo)demo.update(vals);
     try{const s={};T.fields.forEach(f=>{if(!["image","questions"].includes(f.type))s[f.k]=vals[f.k]});localStorage.setItem(saveKey,JSON.stringify(s))}catch(e){}
   }
   changed();
