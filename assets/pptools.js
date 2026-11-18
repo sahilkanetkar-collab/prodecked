@@ -148,6 +148,42 @@ async function repairDeck(zip,{parse,processPackage}={}){
     rels+="</Relationships>";zip.file("_rels/.rels",rels);names.add("_rels/.rels");
     fixes.push("rebuilt the missing package index (_rels/.rels)");
   }
+  // 0b. the slide list's links file was lost: without it no tool can find the slides, so rebuild it from the parts that are left
+  if(!names.has("ppt/_rels/presentation.xml.rels")){
+    const RT="http://schemas.openxmlformats.org/officeDocument/2006/relationships/";
+    const num=n=>+((n.match(/(\d+)\.xml$/)||[])[1]||0);
+    const pick=re=>[...names].filter(n=>re.test(n)).sort((a,b)=>num(a)-num(b));
+    const masters=pick(/^ppt\/slideMasters\/slideMaster\d+\.xml$/),slides=pick(/^ppt\/slides\/slide\d+\.xml$/);
+    const notesM=pick(/^ppt\/notesMasters\/notesMaster\d+\.xml$/),handM=pick(/^ppt\/handoutMasters\/handoutMaster\d+\.xml$/);
+    let pres=await zip.file("ppt/presentation.xml").async("string");
+    const oldIds=tag=>[...pres.matchAll(new RegExp(`<p:${tag}\\b[^>]*\\bid="(\\d+)"`,"g"))].map(m=>+m[1]);
+    let n=0;const rel=[];
+    const add=(type,target)=>{const id="rIdPd"+(++n);rel.push(`<Relationship Id="${id}" Type="${RT}${type}" Target="${target}"/>`);return id};
+    const rel2=p=>p.replace(/^ppt\//,"");
+    // masters keep their ids where the file still lists them
+    const mIds=oldIds("sldMasterId");let mNext=Math.max(2147483648,...mIds)+1000;
+    const mList=masters.map((m,i)=>`<p:sldMasterId id="${mIds[i]!=null?mIds[i]:(mNext+=1000)}" r:id="${add("slideMaster",rel2(m))}"/>`).join("");
+    const nList=notesM.length?`<p:notesMasterIdLst><p:notesMasterId r:id="${add("notesMaster",rel2(notesM[0]))}"/></p:notesMasterIdLst>`:"";
+    const hList=handM.length?`<p:handoutMasterIdLst><p:handoutMasterId r:id="${add("handoutMaster",rel2(handM[0]))}"/></p:handoutMasterIdLst>`:"";
+    const sIds=oldIds("sldId");let sNext=Math.max(255,...sIds);
+    const sList=slides.map((s,i)=>`<p:sldId id="${sIds[i]!=null?sIds[i]:++sNext}" r:id="${add("slide",rel2(s))}"/>`).join("");
+    // the theme the first master uses, else the first theme
+    let theme=null;
+    if(masters.length){const mr=zip.file(relsFor(masters[0]));if(mr){const t=relsList(await mr.async("string")).find(x=>/\/theme$/.test(x.type));if(t)theme=resolve(masters[0],t.target)}}
+    if(!theme||!names.has(theme))theme=pick(/^ppt\/theme\/theme\d+\.xml$/)[0]||null;
+    if(theme)add("theme",rel2(theme));
+    [["presProps","ppt/presProps.xml"],["viewProps","ppt/viewProps.xml"],["tableStyles","ppt/tableStyles.xml"],["commentAuthors","ppt/commentAuthors.xml"]]
+      .forEach(([t,p])=>{if(names.has(p))add(t,rel2(p))});
+    // replace the four id lists (their r:ids pointed into the lost file) with fresh ones, in the order PowerPoint expects
+    pres=pres.replace(/<p:(sldMasterIdLst|notesMasterIdLst|handoutMasterIdLst|sldIdLst)\b[^>]*?(?:\/>|>[\s\S]*?<\/p:\1>)/g,"");
+    const lists=(mList?`<p:sldMasterIdLst>${mList}</p:sldMasterIdLst>`:"")+nList+hList+(sList?`<p:sldIdLst>${sList}</p:sldIdLst>`:"");
+    pres=pres.replace(/(<p:presentation\b[^>]*>)/,`$1${lists}`);
+    if(!/xmlns:r=/.test(pres.match(/<p:presentation\b[^>]*>/)[0]))pres=pres.replace(/<p:presentation\b/,`<p:presentation xmlns:r="${RT.replace(/relationships\/$/,"relationships")}"`);
+    zip.file("ppt/presentation.xml",pres);
+    zip.file("ppt/_rels/presentation.xml.rels",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="${REL_NS}">${rel.join("")}</Relationships>`);
+    names.add("ppt/_rels/presentation.xml.rels");
+    fixes.push(`rebuilt the lost slide list (${slides.length} slide${slides.length===1?"":"s"} found${slides.length>1?", put back in the order they were saved: check the order":""})`);
+  }
   // 1. relationships pointing at missing parts
   for(const r of await allRels(zip)){
     if(r.src&&!names.has(r.src)){zip.remove(r.rn);fixes.push(`removed orphan relationship file ${r.rn}`);continue}

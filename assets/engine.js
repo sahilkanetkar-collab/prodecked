@@ -974,7 +974,9 @@ function slideNamesOf(zip){
 /* slide order as shown in PowerPoint (presentation.xml sldIdLst), not file names */
 async function orderedSlides(zip){
   const pres=await zip.file("ppt/presentation.xml").async("string");
-  const rels=await zip.file("ppt/_rels/presentation.xml.rels").async("string");
+  const relsFile=zip.file("ppt/_rels/presentation.xml.rels");
+  if(!relsFile)return slideNamesOf(zip);
+  const rels=await relsFile.async("string");
   const map={};for(const m of rels.matchAll(/<Relationship\b[^>]*>/g)){const id=(m[0].match(/Id="([^"]+)"/)||[])[1],t=(m[0].match(/Target="([^"]+)"/)||[])[1];if(id&&t)map[id]=t}
   const out=[];
   for(const m of pres.matchAll(/<p:sldId\b[^>]*r:id="([^"]+)"/g)){
@@ -1085,7 +1087,12 @@ async function processPackage(zip,cfg,put){
   const names=await orderedSlides(zip);
   if(!names.length)throw new Error("No slides found — is this a valid .pptx?");
   const range=parseRange(cfg.range,names.length);
-  if(!range.size)throw new Error('"Which slides" says "'+String(cfg.range).trim()+'", which doesn\'t match any of the '+names.length+' slides in this deck. Leave it as "all", or list slides like 2-10, 14.');
+  if(!range.size){
+    /* people sometimes type a timing here ("0,8 à 1 seconde", "1 sec"): say where timing actually goes */
+    if(/\d\s*(?:s|sec|secs|seconds?|secondes?|segundos?|sekunden?|ms|min|minutes?|minutos?)\b/i.test(String(cfg.range)))
+      throw new Error('"Which slides" is for slide numbers, but it says "'+String(cfg.range).trim()+'", which looks like a timing. Set it back to "all" (or slide numbers like 2-10, 14). Timing is set with the speed or timing settings, not here.');
+    throw new Error('"Which slides" says "'+String(cfg.range).trim()+'", which doesn\'t match any of the '+names.length+' slides in this deck. Leave it as "all", or list slides like 2-10, 14.');
+  }
   const{W,H}=await slideSize(zip);
   const stats={touched:0,totalAnim:0,stripped:0,questions:[],fixedIds:0};
 

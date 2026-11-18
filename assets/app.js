@@ -259,7 +259,8 @@ function initTool(){
     const logLines=[];const log=(k,v,cls)=>logLines.push({k,v,cls});
     const t0=performance.now();
     const nFiles=T.input==="pptx"?files.length:null;
-    track(id,"run",nFiles);
+    let tag=null;try{tag=T.tag?T.tag(vals):null}catch(e){}
+    track(id,"run",nFiles,tag);
     try{
       let out;
       if(T.input==="text"){out=await T.run(vals,ui)}

@@ -15,7 +15,7 @@ const BGS=[
 ];
 const PALS=[["keep","Keep current"],["royal","Royal"],["forest","Forest"],["crimson","Crimson"],["ocean","Ocean"],["slate","Slate"]];
 
-const range={k:"range",type:"text",label:"Which slides",placeholder:"all   (or e.g. 2-10, 14)",def:"all",hint:"Leave as “all”, or list slides like 2-10, 14."};
+const range={k:"range",type:"text",label:"Which slides",placeholder:"all   (or e.g. 2-10, 14)",def:"all",hint:"Slide numbers only. Leave as “all”, or list slides like 2-10, 14."};
 
 const T={};
 
@@ -33,6 +33,7 @@ T["animate-ppt"]={input:"pptx",multi:true,suffix:"animated",
       options:[["keep","No change"],["fade","Fade"],["push","Push"],["wipe","Wipe"],["morph","Morph"],["none","Remove"]],def:"keep"},
     range],
   demo:"animate",
+  tag:v=>v.tr&&v.tr!=="keep"?"plus-transition":null,  /* counted on the dashboard: who uses both in one go */
   presets:[
     {id:"classroom",name:"Classroom",desc:"One bullet per click, the last one greyed, fade between slides",v:{effect:"fade",gran:"para",trigger:"click",dim:true,skipTitle:true,dur:500,tr:"fade"}},
     {id:"self-running",name:"Self-running",desc:"Bullets come in by themselves, no clicks",v:{effect:"fade",gran:"para",trigger:"after",dim:false,skipTitle:true,dur:400,tr:"fade"}},
@@ -103,6 +104,7 @@ T["ppt-transitions"]={input:"pptx",multi:true,suffix:"transitions",
     {k:"effect",type:"select",label:"Text effect",options:ENTR,def:"fade",showIf:v=>v.anim&&v.anim!=="no"},
     range],
   demo:"transitions",
+  tag:v=>v.anim&&v.anim!=="no"?"plus-animation":null,
   cfg:v=>({...BASE,range:v.range,transition:v.t,spd:v.spd,
     anim:v.anim&&v.anim!=="no"?{effect:v.effect||"fade",dir:"b",granularity:v.anim,trigger:"click",duration:500,stagger:0,skipTitle:true,dimAfter:false,scope:{text:true,pic:true,other:true}}:null}),
   note:"Morph needs PowerPoint 2019 or Microsoft 365. Older PowerPoint and Google Slides show a fade instead."
